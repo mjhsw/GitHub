@@ -1,0 +1,23 @@
+
+{
+  "name": "study-killer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AI 기반 학습 자료 정리 및 대화형 문제 학습",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.5.0",
+    "helmet": "^8.0.0",
+    "multer": "^2.0.0",
+    "openai": "^4.0.0"
+  }
+}

@@ -1,0 +1,1317 @@
+
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>공부킬러 - AI 시험 대비 솔루션</title>
+
+  <meta name="theme-color" content="#6657e8">
+  <meta name="description" content="AI가 공부 자료를 분석하고 요약과 시험 문제를 만들어 주는 공부킬러">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <link rel="stylesheet"
+    href="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.css">
+
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+
+  <link rel="stylesheet" href="/style.css">
+
+  <style>
+    :root {
+      --primary: #6657e8;
+      --primary-dark: #5142d5;
+      --background: #f6f7fc;
+      --surface: #ffffff;
+      --text: #25243a;
+      --muted: #85859a;
+      --border: #e8e8f1;
+      --success: #18a66a;
+      --danger: #ed5364;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      background: var(--background);
+      color: var(--text);
+      font-family:
+        "Noto Sans KR",
+        "Malgun Gothic",
+        Arial,
+        sans-serif;
+    }
+
+    button,
+    input,
+    textarea,
+    select {
+      font: inherit;
+    }
+
+    button {
+      cursor: pointer;
+    }
+
+    .app {
+      min-height: 100vh;
+    }
+
+    /* 헤더 */
+
+    .header {
+      height: 72px;
+      background: #fff;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 7%;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .logo {
+      font-size: 23px;
+      font-weight: 900;
+      color: var(--primary);
+      letter-spacing: -1px;
+      cursor: pointer;
+    }
+
+    .logo span {
+      color: #25243a;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .header-label {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    /* 네비게이션 */
+
+    .navigation {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      padding: 14px;
+      background: #fff;
+      border-bottom: 1px solid var(--border);
+      flex-wrap: wrap;
+    }
+
+    .nav-button {
+      border: 0;
+      background: transparent;
+      padding: 10px 17px;
+      border-radius: 10px;
+      color: #77768c;
+      font-weight: 700;
+      transition: .2s;
+    }
+
+    .nav-button:hover,
+    .nav-button.active {
+      background: #efedff;
+      color: var(--primary);
+    }
+
+    /* 공통 페이지 */
+
+    .page {
+      display: none;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 45px 22px 80px;
+      animation: fadeIn .25s ease;
+    }
+
+    .page.active {
+      display: block;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(8px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .section-title {
+      font-size: 27px;
+      font-weight: 900;
+      margin: 0 0 12px;
+      letter-spacing: -1px;
+    }
+
+    .section-description {
+      color: var(--muted);
+      margin-bottom: 30px;
+      line-height: 1.7;
+    }
+
+    /* 버튼 */
+
+    .btn {
+      border: 0;
+      padding: 13px 21px;
+      border-radius: 12px;
+      font-weight: 800;
+      transition: .2s;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: #fff;
+    }
+
+    .btn-primary:hover {
+      background: var(--primary-dark);
+      transform: translateY(-2px);
+    }
+
+    .btn-secondary {
+      background: #efedff;
+      color: var(--primary);
+    }
+
+    .btn-secondary:hover {
+      background: #e5e1ff;
+    }
+
+    .btn-danger {
+      background: #fff0f1;
+      color: var(--danger);
+    }
+
+    .btn:disabled {
+      opacity: .5;
+      cursor: not-allowed;
+    }
+
+    /* 홈 */
+
+    .hero {
+      text-align: center;
+      padding: 65px 20px 55px;
+      background:
+        radial-gradient(circle at 50% 0%, #e9e5ff, transparent 65%);
+      border-radius: 24px;
+      margin-bottom: 35px;
+    }
+
+    .hero-badge {
+      display: inline-block;
+      padding: 8px 15px;
+      background: #efedff;
+      color: var(--primary);
+      font-size: 13px;
+      font-weight: 800;
+      border-radius: 30px;
+      margin-bottom: 20px;
+    }
+
+    .hero h1 {
+      font-size: clamp(34px, 6vw, 58px);
+      line-height: 1.25;
+      font-weight: 900;
+      letter-spacing: -2px;
+      margin: 0;
+    }
+
+    .hero h1 span {
+      color: var(--primary);
+    }
+
+    .hero p {
+      color: #77768c;
+      line-height: 1.8;
+      margin: 20px 0 28px;
+    }
+
+    .hero-actions {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    /* 기능 카드 */
+
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 18px;
+    }
+
+    .feature-card {
+      background: #fff;
+      padding: 25px;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      transition: .2s;
+      cursor: pointer;
+    }
+
+    .feature-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 12px 30px rgba(60, 50, 120, .07);
+    }
+
+    .feature-icon {
+      width: 48px;
+      height: 48px;
+      display: grid;
+      place-items: center;
+      border-radius: 14px;
+      background: #efedff;
+      font-size: 24px;
+      margin-bottom: 17px;
+    }
+
+    .feature-card h3 {
+      font-size: 17px;
+      margin: 0 0 9px;
+    }
+
+    .feature-card p {
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.7;
+      margin: 0;
+    }
+
+    /* 카드 */
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 27px;
+      box-shadow: 0 5px 20px rgba(30, 30, 70, .025);
+    }
+
+    /* 업로드 */
+
+    .upload-box {
+      border: 2px dashed #c9c3f6;
+      background: #fbfaff;
+      border-radius: 18px;
+      padding: 45px 20px;
+      text-align: center;
+      transition: .2s;
+    }
+
+    .upload-box:hover {
+      border-color: var(--primary);
+      background: #f7f5ff;
+    }
+
+    .upload-icon {
+      font-size: 45px;
+      margin-bottom: 12px;
+    }
+
+    .upload-box h3 {
+      margin: 0 0 9px;
+      font-size: 19px;
+    }
+
+    .upload-box p {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.7;
+    }
+
+    .file-input {
+      display: none;
+    }
+
+    .file-name {
+      margin-top: 17px;
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--primary);
+      overflow-wrap: anywhere;
+    }
+
+    .image-preview {
+      max-width: 100%;
+      max-height: 350px;
+      object-fit: contain;
+      display: none;
+      margin: 20px auto 0;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+    }
+
+    .upload-actions {
+      margin-top: 22px;
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    /* 요약 */
+
+    .summary-content {
+      line-height: 1.9;
+      font-size: 15px;
+      overflow-wrap: anywhere;
+    }
+
+    .summary-content h1,
+    .summary-content h2,
+    .summary-content h3 {
+      margin: 25px 0 12px;
+      color: var(--text);
+    }
+
+    .summary-content h1 {
+      font-size: 24px;
+    }
+
+    .summary-content h2 {
+      font-size: 21px;
+    }
+
+    .summary-content h3 {
+      font-size: 18px;
+    }
+
+    .summary-content ul {
+      padding-left: 23px;
+    }
+
+    .summary-content li {
+      margin-bottom: 8px;
+    }
+
+    /* 수학 수식 */
+
+    .math-display {
+      display: block;
+      overflow-x: auto;
+      overflow-y: hidden;
+      padding: 14px 5px;
+      margin: 12px 0;
+      text-align: center;
+    }
+
+    .math-inline {
+      display: inline-block;
+      max-width: 100%;
+      vertical-align: middle;
+    }
+
+    .katex-display {
+      overflow-x: auto;
+      overflow-y: hidden;
+      padding: 5px 0;
+    }
+
+    .katex {
+      font-size: 1.08em;
+    }
+
+    /* 문제 */
+
+    .quiz-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .quiz-progress {
+      height: 8px;
+      background: #e9e8f2;
+      border-radius: 20px;
+      overflow: hidden;
+      margin-bottom: 27px;
+    }
+
+    .quiz-progress-bar {
+      width: 0;
+      height: 100%;
+      background: var(--primary);
+      transition: width .3s;
+    }
+
+    .quiz-question {
+      font-size: 20px;
+      font-weight: 800;
+      line-height: 1.8;
+      margin-bottom: 25px;
+      overflow-wrap: anywhere;
+    }
+
+    .quiz-options {
+      display: grid;
+      gap: 12px;
+    }
+
+    .quiz-option {
+      display: flex;
+      align-items: center;
+      gap: 13px;
+      width: 100%;
+      text-align: left;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 13px;
+      padding: 16px;
+      color: var(--text);
+      transition: .2s;
+    }
+
+    .quiz-option:hover {
+      border-color: var(--primary);
+      background: #faf9ff;
+    }
+
+    .quiz-option.selected {
+      border: 2px solid var(--primary);
+      background: #f3f1ff;
+      color: var(--primary);
+    }
+
+    .option-number {
+      flex-shrink: 0;
+      width: 29px;
+      height: 29px;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      background: #f0eff7;
+      font-weight: 800;
+    }
+
+    .option-text {
+      overflow-wrap: anywhere;
+    }
+
+    .quiz-option.correct {
+      border: 2px solid var(--success);
+      background: #effbf5;
+      color: #147a50;
+    }
+
+    .quiz-option.incorrect {
+      border: 2px solid var(--danger);
+      background: #fff1f2;
+      color: #c6384b;
+    }
+
+    .quiz-option:disabled {
+      cursor: default;
+      opacity: 1;
+    }
+
+    .quiz-bottom {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      margin-top: 25px;
+    }
+
+    /* 문제 생성 */
+
+    .quiz-settings {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 20px;
+    }
+
+    .quiz-settings select {
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: white;
+    }
+
+    /* 채팅 */
+
+    .chat-container {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      overflow: hidden;
+    }
+
+    .chat-header {
+      padding: 20px;
+      border-bottom: 1px solid var(--border);
+      font-weight: 900;
+    }
+
+    .chat-messages {
+      height: 440px;
+      overflow-y: auto;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+
+    .chat-message {
+      max-width: 85%;
+      padding: 14px 17px;
+      border-radius: 15px;
+      line-height: 1.8;
+      overflow-wrap: anywhere;
+    }
+
+    .chat-message.user {
+      align-self: flex-end;
+      background: var(--primary);
+      color: #fff;
+      border-bottom-right-radius: 4px;
+    }
+
+    .chat-message.assistant {
+      align-self: flex-start;
+      background: #f3f3f9;
+      color: var(--text);
+      border-bottom-left-radius: 4px;
+    }
+
+    .message-content {
+      overflow-wrap: anywhere;
+    }
+
+    .chat-input-area {
+      display: flex;
+      gap: 10px;
+      padding: 15px;
+      border-top: 1px solid var(--border);
+    }
+
+    .chat-input {
+      flex: 1;
+      min-width: 0;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 13px;
+      outline: none;
+    }
+
+    .chat-input:focus {
+      border-color: var(--primary);
+    }
+
+    /* 오답노트 */
+
+    .wrong-card {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 15px;
+      padding: 23px;
+      margin-bottom: 17px;
+    }
+
+    .wrong-card h3 {
+      margin-top: 0;
+      color: var(--primary);
+    }
+
+    .wrong-question {
+      font-weight: 800;
+      line-height: 1.8;
+      margin-bottom: 17px;
+    }
+
+    .wrong-selected {
+      color: var(--danger);
+    }
+
+    .wrong-correct {
+      color: var(--success);
+      font-weight: 800;
+    }
+
+    .wrong-explanation {
+      background: #f8f8fc;
+      padding: 15px;
+      border-radius: 12px;
+      line-height: 1.8;
+      margin-top: 15px;
+      overflow-wrap: anywhere;
+    }
+
+    /* 결과 */
+
+    .result-card {
+      text-align: center;
+      background: white;
+      border: 1px solid var(--border);
+      padding: 40px 20px;
+      border-radius: 20px;
+    }
+
+    .result-score {
+      color: var(--primary);
+      font-size: 55px;
+      font-weight: 900;
+      margin: 20px 0;
+    }
+
+    /* 로딩 */
+
+    #loading {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      background: rgba(255,255,255,.82);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 17px;
+      backdrop-filter: blur(4px);
+    }
+
+    .spinner {
+      width: 45px;
+      height: 45px;
+      border: 4px solid #e7e4ff;
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin .8s linear infinite;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    .loading-text {
+      color: var(--primary);
+      font-weight: 800;
+    }
+
+    /* 푸터 */
+
+    .footer {
+      text-align: center;
+      padding: 30px 15px;
+      color: var(--muted);
+      font-size: 12px;
+      border-top: 1px solid var(--border);
+      background: #fff;
+    }
+
+    /* 모바일 */
+
+    @media (max-width: 750px) {
+      .header {
+        padding: 0 18px;
+      }
+
+      .navigation {
+        gap: 3px;
+      }
+
+      .nav-button {
+        padding: 9px 11px;
+        font-size: 12px;
+      }
+
+      .feature-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .page {
+        padding: 30px 15px 60px;
+      }
+
+      .hero {
+        padding: 45px 15px;
+      }
+
+      .hero h1 {
+        font-size: 36px;
+      }
+
+      .card {
+        padding: 19px;
+      }
+
+      .chat-messages {
+        height: 390px;
+      }
+
+      .chat-message {
+        max-width: 95%;
+      }
+
+      .quiz-question {
+        font-size: 18px;
+      }
+
+      .quiz-bottom {
+        flex-wrap: wrap;
+      }
+
+      .quiz-bottom .btn {
+        flex: 1;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+<div class="app">
+
+  <!-- 헤더 -->
+  <header class="header">
+
+    <div class="logo" onclick="showPage('home')">
+      공부<span>킬러</span>
+    </div>
+
+    <div class="header-right">
+      <span class="header-label">AI 시험 대비 솔루션</span>
+    </div>
+
+  </header>
+
+  <!-- 네비게이션 -->
+  <nav class="navigation">
+
+    <button class="nav-button active"
+      onclick="showPage('home')">
+      홈
+    </button>
+
+    <button class="nav-button"
+      onclick="showPage('upload')">
+      자료 업로드
+    </button>
+
+    <button class="nav-button"
+      onclick="showPage('summary')">
+      AI 요약
+    </button>
+
+    <button class="nav-button"
+      onclick="showPage('quiz')">
+      문제 풀이
+    </button>
+
+    <button class="nav-button"
+      onclick="showPage('chat')">
+      AI 질문
+    </button>
+
+    <button class="nav-button"
+      onclick="showPage('wrong')">
+      오답노트
+    </button>
+
+  </nav>
+
+  <!-- 홈 -->
+  <main>
+
+    <section id="home" class="page active">
+
+      <div class="hero">
+
+        <div class="hero-badge">
+          AI SMART STUDY
+        </div>
+
+        <h1>
+          공부의 끝판왕<br>
+          <span>공부킬러</span>
+        </h1>
+
+        <p>
+          공부 자료를 업로드하면 AI가 분석하고<br>
+          핵심 요약부터 실전 문제까지 만들어 드립니다.
+        </p>
+
+        <div class="hero-actions">
+
+          <button class="btn btn-primary"
+            onclick="showPage('upload')">
+            공부 시작하기
+          </button>
+
+          <button class="btn btn-secondary"
+            onclick="showPage('chat')">
+            AI에게 질문하기
+          </button>
+
+        </div>
+
+      </div>
+
+      <h2 class="section-title">공부킬러 주요 기능</h2>
+
+      <p class="section-description">
+        공부에 필요한 기능을 한곳에서 이용하세요.
+      </p>
+
+      <div class="feature-grid">
+
+        <div class="feature-card"
+          onclick="showPage('upload')">
+
+          <div class="feature-icon">📷</div>
+
+          <h3>자료 업로드</h3>
+
+          <p>
+            사진이나 PDF 자료를 업로드하고
+            AI 분석을 시작하세요.
+          </p>
+
+        </div>
+
+        <div class="feature-card"
+          onclick="showPage('summary')">
+
+          <div class="feature-icon">📚</div>
+
+          <h3>AI 핵심 요약</h3>
+
+          <p>
+            복잡한 공부 내용을 핵심 개념과
+            중요한 내용으로 정리합니다.
+          </p>
+
+        </div>
+
+        <div class="feature-card"
+          onclick="showPage('quiz')">
+
+          <div class="feature-icon">📝</div>
+
+          <h3>AI 문제 생성</h3>
+
+          <p>
+            학습 자료를 바탕으로
+            실전 시험 문제를 생성합니다.
+          </p>
+
+        </div>
+
+        <div class="feature-card"
+          onclick="showPage('wrong')">
+
+          <div class="feature-icon">🎯</div>
+
+          <h3>오답노트</h3>
+
+          <p>
+            틀린 문제와 해설을 저장하고
+            다시 복습할 수 있습니다.
+          </p>
+
+        </div>
+
+        <div class="feature-card"
+          onclick="showPage('chat')">
+
+          <div class="feature-icon">🤖</div>
+
+          <h3>AI 공부 도우미</h3>
+
+          <p>
+            모르는 내용을 질문하고
+            단계별 설명을 받을 수 있습니다.
+          </p>
+
+        </div>
+
+        <div class="feature-card"
+          onclick="showPage('quiz')">
+
+          <div class="feature-icon">📈</div>
+
+          <h3>시험 대비</h3>
+
+          <p>
+            직접 문제를 풀면서
+            실력을 확인할 수 있습니다.
+          </p>
+
+        </div>
+
+      </div>
+
+    </section>
+
+    <!-- 업로드 -->
+    <section id="upload" class="page">
+
+      <h2 class="section-title">공부 자료 업로드</h2>
+
+      <p class="section-description">
+        공부하고 싶은 교과서, 문제집, 필기 자료를 업로드하세요.
+      </p>
+
+      <div class="card">
+
+        <div class="upload-box"
+          onclick="document.getElementById('fileInput').click()">
+
+          <div class="upload-icon">📁</div>
+
+          <h3>파일을 선택해 주세요</h3>
+
+          <p>
+            이미지 또는 PDF 파일을 선택할 수 있습니다.<br>
+            이미지 파일(JPG, PNG 등)만 지원하며, 최대 8MB까지 업로드할 수 있습니다.
+          </p>
+
+          <button type="button" class="btn btn-secondary">
+            파일 선택하기
+          </button>
+
+          <input
+            type="file"
+            id="fileInput"
+            class="file-input"
+            accept="image/*"
+            onclick="event.stopPropagation()"
+          >
+
+        </div>
+
+        <div id="fileName" class="file-name"></div>
+
+        <img
+          id="imagePreview"
+          class="image-preview"
+          alt="업로드 이미지 미리보기"
+        >
+
+        <div class="upload-actions">
+
+          <button
+            id="uploadButton"
+            class="btn btn-primary"
+            type="button"
+          >
+            AI 분석 시작하기
+          </button>
+
+          <button
+            class="btn btn-secondary"
+            type="button"
+            onclick="showPage('home')"
+          >
+            돌아가기
+          </button>
+
+        </div>
+
+      </div>
+
+    </section>
+
+    <!-- 요약 -->
+    <section id="summary" class="page">
+
+      <h2 class="section-title">AI 핵심 요약</h2>
+
+      <p class="section-description">
+        업로드한 공부 자료를 AI가 분석한 결과입니다.
+      </p>
+
+      <div class="card">
+
+        <div
+          id="summaryContent"
+          class="summary-content"
+        >
+          <p>
+            아직 분석된 자료가 없습니다.<br>
+            먼저 공부 자료를 업로드해 주세요.
+          </p>
+        </div>
+
+      </div>
+
+      <div class="upload-actions">
+
+        <button
+          class="btn btn-primary"
+          onclick="showPage('quiz')"
+        >
+          문제 풀기
+        </button>
+
+        <button
+          class="btn btn-secondary"
+          onclick="showPage('chat')"
+        >
+          AI에게 질문하기
+        </button>
+
+      </div>
+
+    </section>
+
+    <!-- 문제 생성 및 풀이 -->
+    <section id="quiz" class="page">
+
+      <h2 class="section-title">AI 문제 풀이</h2>
+
+      <p class="section-description">
+        학습한 자료를 바탕으로 실전 문제를 풀어보세요.
+      </p>
+
+      <div class="card">
+
+        <div class="quiz-settings">
+
+          <label for="quizCount">
+            문제 개수
+          </label>
+
+          <select id="quizCount">
+            <option value="10">10문제</option>
+            <option value="20">20문제</option>
+            <option value="30">30문제</option>
+            <option value="40">40문제</option>
+            <option value="50">50문제</option>
+          </select>
+
+          <button
+            class="btn btn-primary"
+            onclick="generateQuiz(Number(document.getElementById('quizCount').value))"
+          >
+            문제 생성하기
+          </button>
+
+        </div>
+
+        <div id="quizArea" style="margin-top:30px; display:none;">
+
+          <div class="quiz-header">
+
+            <strong id="questionNumber">
+              문제를 생성해 주세요.
+            </strong>
+
+            <span style="color:var(--muted);font-size:13px;">
+              STUDY QUIZ
+            </span>
+
+          </div>
+
+          <div class="quiz-progress">
+            <div
+              id="quizProgress"
+              class="quiz-progress-bar"
+            ></div>
+          </div>
+
+          <div
+            id="quizQuestion"
+            class="quiz-question"
+          >
+            문제 생성 버튼을 눌러주세요.
+          </div>
+
+          <div
+            id="quizOptions"
+            class="quiz-options"
+          ></div>
+
+          <div class="quiz-bottom">
+
+            <button
+              class="btn btn-secondary"
+              onclick="previousQuestion()"
+            >
+              이전 문제
+            </button>
+
+            <button
+              class="btn btn-primary"
+              onclick="nextQuestion()"
+            >
+              다음 문제
+            </button>
+
+          </div>
+
+        </div>
+
+      </div>
+
+    </section>
+
+    <!-- 결과 -->
+    <section id="quizResult" class="page">
+
+      <h2 class="section-title">시험 결과</h2>
+
+      <p class="section-description">
+        문제 풀이 결과를 확인하세요.
+      </p>
+
+      <div id="resultContent"></div>
+
+      <div id="quizResultContent"></div>
+
+      <div class="upload-actions">
+
+        <button
+          class="btn btn-primary"
+          onclick="showWrongAnswers()"
+        >
+          오답 확인하기
+        </button>
+
+        <button
+          class="btn btn-secondary"
+          onclick="showPage('quiz')"
+        >
+          다시 풀기
+        </button>
+
+      </div>
+
+    </section>
+
+    <!-- AI 채팅 -->
+    <section id="chat" class="page">
+
+      <h2 class="section-title">AI 공부 도우미</h2>
+
+      <p class="section-description">
+        모르는 문제나 개념을 자유롭게 질문해 보세요.
+      </p>
+
+      <div class="chat-container">
+
+        <div class="chat-header">
+          🤖 공부킬러 AI
+        </div>
+
+        <div
+          id="chatMessages"
+          class="chat-messages"
+        >
+
+          <div class="chat-message assistant">
+            <div class="message-content">
+              안녕하세요! 공부킬러 AI입니다.<br>
+              공부하면서 궁금한 점을 질문해 주세요.
+            </div>
+          </div>
+
+        </div>
+
+        <div class="chat-input-area">
+
+          <input
+            id="chatInput"
+            class="chat-input"
+            type="text"
+            placeholder="질문을 입력해 주세요..."
+            autocomplete="off"
+          >
+
+          <button
+            id="chatSend"
+            class="btn btn-primary"
+            type="button"
+          >
+            전송
+          </button>
+
+        </div>
+
+      </div>
+
+    </section>
+
+    <!-- 오답노트 -->
+    <section id="wrong" class="page">
+
+      <h2 class="section-title">오답노트</h2>
+
+      <p class="section-description">
+        틀린 문제를 확인하고 다시 복습하세요.
+      </p>
+
+      <div id="wrongList">
+
+        <div class="card">
+          <p>
+            아직 저장된 오답이 없습니다.
+          </p>
+        </div>
+
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- 푸터 -->
+  <footer class="footer">
+    공부킬러 · AI SMART STUDY<br>
+    더 똑똑한 공부를 위한 AI 학습 도우미
+  </footer>
+
+</div>
+
+<!-- 로딩 -->
+<div id="loading">
+
+  <div class="spinner"></div>
+
+  <div class="loading-text">
+    처리 중입니다...
+  </div>
+
+</div>
+
+<!-- KaTeX 실행 -->
+<script defer
+  src="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js">
+</script>
+
+<script defer
+  src="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/contrib/auto-render.min.js">
+</script>
+
+<!-- 앱 스크립트 -->
+<script defer src="/app.js"></script>
+
+</body>
+</html>

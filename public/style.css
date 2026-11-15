@@ -1,0 +1,229 @@
+
+/* =========================================
+   공부킬러 추가 디자인
+   AI 대화 학습 + 메뉴 충돌 수정
+========================================= */
+
+/* 상단 메뉴와 사이드바 메뉴 스타일 분리 */
+.topbar nav .nav {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  margin: 0;
+  white-space: nowrap;
+  cursor: pointer;
+  text-align: center;
+}
+
+.sidebar .nav {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  cursor: pointer;
+}
+
+/* 버튼 공통 */
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* AI 대화 학습 전체 */
+.chat-container {
+  display: flex;
+  flex-direction: column;
+  min-height: 520px;
+  max-height: 72vh;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 17px;
+  padding: 20px;
+}
+
+/* 대화 메시지 영역 */
+.chat-messages {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 300px;
+  max-height: 480px;
+  overflow-y: auto;
+  gap: 16px;
+  padding: 16px 4px;
+  scroll-behavior: smooth;
+}
+
+/* 스크롤바 */
+.chat-messages::-webkit-scrollbar {
+  width: 6px;
+}
+
+.chat-messages::-webkit-scrollbar-thumb {
+  background: #d9d5f5;
+  border-radius: 10px;
+}
+
+/* 메시지 공통 */
+.chat-message {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-width: 85%;
+  animation: chatAppear 0.2s ease;
+}
+
+.chat-message.user {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+
+.chat-message.assistant {
+  align-self: flex-start;
+  align-items: flex-start;
+}
+
+.chat-who {
+  font-size: 11px;
+  color: var(--muted);
+  padding: 0 5px;
+}
+
+/* 말풍선 */
+.chat-bubble {
+  padding: 13px 16px;
+  border-radius: 15px;
+  font-size: 13px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.chat-message.user .chat-bubble {
+  background: var(--purple);
+  color: #fff;
+  border-bottom-right-radius: 4px;
+}
+
+.chat-message.assistant .chat-bubble {
+  background: #f3f2fb;
+  color: #292b42;
+  border: 1px solid #e8e5f7;
+  border-bottom-left-radius: 4px;
+}
+
+/* 대화 입력창 */
+.chat-compose {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  border-top: 1px solid var(--border);
+  padding-top: 15px;
+  margin-top: 10px;
+}
+
+.chat-compose textarea {
+  flex: 1;
+  min-height: 48px;
+  max-height: 130px;
+  resize: vertical;
+}
+
+.chat-compose button {
+  min-width: 75px;
+  min-height: 45px;
+}
+
+/* AI 답변 대기 */
+.chat-typing {
+  color: var(--purple);
+  font-size: 12px;
+  padding: 10px 5px;
+  animation: typingPulse 1.2s infinite;
+}
+
+@keyframes typingPulse {
+  0%, 100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes chatAppear {
+  from {
+    opacity: 0;
+    transform: translateY(7px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 현재 학습 자료 표시 */
+#chat-context {
+  padding: 12px 14px;
+  border-radius: 11px;
+  background: #f3f1ff;
+  color: #5d4ed8;
+  border: 1px solid #e5e0ff;
+  font-size: 12px;
+  line-height: 1.7;
+  margin-bottom: 12px;
+}
+
+/* 오류 메시지 */
+.chat-error {
+  background: #fff0ef;
+  color: #b42318;
+  border: 1px solid #f5d0cc;
+  padding: 12px;
+  border-radius: 10px;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+/* AI 질문 강조 */
+.chat-bubble strong {
+  color: var(--purple);
+}
+
+/* 모바일 화면 */
+@media (max-width: 760px) {
+  .chat-container {
+    padding: 14px;
+    min-height: 480px;
+    max-height: 78vh;
+  }
+
+  .chat-messages {
+    min-height: 260px;
+    max-height: 55vh;
+  }
+
+  .chat-message {
+    max-width: 94%;
+  }
+
+  .chat-compose {
+    gap: 7px;
+  }
+
+  .chat-compose button {
+    min-width: 65px;
+    padding: 10px;
+  }
+}
+
+@media (max-width: 420px) {
+  .chat-compose {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .chat-compose button {
+    width: 100%;
+  }
+}
