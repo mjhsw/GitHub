@@ -1,25 +1,23 @@
 
 /* =========================================================
    공부킬러 - public/app.js
-   전체 수정 및 복구 버전
+   전체 수정본
 
-   1. 페이지 이동
-   2. 이미지 선택 및 미리보기
-   3. Tesseract OCR
-   4. AI 자료 분석
-   5. 핵심 요약 및 수학 수식
-   6. 문제 생성 및 채점
-   7. 시험 결과
-   8. 오답노트 자동 저장 및 이동
-   9. 오답 다시 풀기
-   10. AI 채팅
-   11. 학습 기록 저장
+   수정 사항
+   1. 문제 개수 10~100개 선택 지원
+   2. 선택한 개수만큼 실제 출제
+   3. 문제 수를 변경해도 전체 문제 보존
+   4. 시험 결과 및 오답노트
+   5. 오답 다시 풀기
+   6. 이미지 업로드 및 OCR
+   7. AI 자료 분석 및 채팅
+   8. 학습 기록 저장
 ========================================================= */
 
 "use strict";
 
 /* =========================================================
-   1. 설정
+   1. 설정 및 상태
 ========================================================= */
 
 const API = {
@@ -41,11 +39,13 @@ let selectedFile = null;
 let currentStudyText = "";
 let currentTitle = "";
 
+// 전체 문제와 현재 시험 문제를 분리합니다.
+let allQuestions = [];
 let currentQuestions = [];
+
 let currentQuestionIndex = 0;
 let userAnswers = [];
 let wrongAnswers = [];
-
 let chatHistory = [];
 
 let isLoading = false;
@@ -67,26 +67,6 @@ function escapeHTML(value) {
   })[char]);
 }
 
-function safeStorageGet(key, fallback = "") {
-  try {
-    return localStorage.getItem(key) ?? fallback;
-  } catch (error) {
-    console.warn("저장 데이터 읽기 실패:", error);
-    return fallback;
-  }
-}
-
-function safeStorageSet(key, value) {
-  try {
-    localStorage.setItem(key, value);
-    return true;
-  } catch (error) {
-    console.error("저장 실패:", error);
-    showToast("저장 공간이 부족하거나 브라우저 저장이 차단되었습니다.", "error");
-    return false;
-  }
-}
-
 function showToast(message, type = "info") {
   let toast = $("studyKillerToast");
 
@@ -106,8 +86,7 @@ function showToast(message, type = "info") {
       color:white;
       font-size:13px;
       max-width:90vw;
-      box-shadow:0 8px 28px #0002;
-      transition:.2s;
+      box-shadow:0 8px 28px #0005;
     `;
 
     document.body.appendChild(toast);
@@ -129,9 +108,32 @@ function showToast(message, type = "info") {
   }, 3200);
 }
 
-/* =========================================================
-   3. 로딩
-========================================================= */
+function normalizeArray(value) {
+  if (Array.isArray(value)) {
+    return value.map(item => {
+      if (typeof item === "string") return item;
+
+      if (item && typeof item === "object") {
+        if (item.term && item.meaning) {
+          return `${item.term}: ${item.meaning}`;
+        }
+
+        return item.text ||
+          item.content ||
+          item.title ||
+          JSON.stringify(item);
+      }
+
+      return String(item ?? "");
+    }).filter(Boolean);
+  }
+
+  if (typeof value === "string") {
+    return value.split(/\n+/).filter(Boolean);
+  }
+
+  return [];
+}
 
 function setLoading(state, message = "처리 중입니다...") {
   isLoading = state;
@@ -143,27 +145,17 @@ function setLoading(state, message = "처리 중입니다...") {
 
     const text = loading.querySelector(".loading-text");
 
-    if (text) {
-      text.textContent = message;
-    }
+    if (text) text.textContent = message;
   }
 
   ["uploadButton", "chatSend"].forEach(id => {
     const button = $(id);
     if (button) button.disabled = state;
   });
-
-  const quizButton = document.querySelector(
-    "#quiz .quiz-settings button"
-  );
-
-  if (quizButton) {
-    quizButton.disabled = state;
-  }
 }
 
 /* =========================================================
-   4. 서버 응답
+   3. 서버 응답 처리
 ========================================================= */
 
 async function readResponse(response) {
@@ -175,7 +167,7 @@ async function readResponse(response) {
     data = raw ? JSON.parse(raw) : {};
   } catch {
     throw new Error(
-      "서버 응답을 읽을 수 없습니다. 서버 실행 상태를 확인해 주세요."
+      "서버 응답을 읽을 수 없습니다. 서버 상태를 확인해 주세요."
     );
   }
 
@@ -189,7 +181,7 @@ async function readResponse(response) {
 }
 
 /* =========================================================
-   5. 페이지 이동
+   4. 페이지 이동
 ========================================================= */
 
 function showPage(pageName) {
@@ -197,8 +189,7 @@ function showPage(pageName) {
 
   if (!target || !target.classList.contains("page")) {
     console.warn("페이지를 찾을 수 없습니다:", pageName);
-    showToast("페이지를 찾을 수 없습니다: " + pageName, "error");
-    return false;
+    return;
   }
 
   document.querySelectorAll("main .page").forEach(page => {
@@ -212,8 +203,7 @@ function showPage(pageName) {
 
     button.classList.toggle(
       "active",
-      action.includes(`'${pageName}'`) ||
-      action.includes(`"${pageName}"`)
+      action.includes(`'${pageName}'`)
     );
   });
 
@@ -229,14 +219,12 @@ function showPage(pageName) {
   if (pageName === "summary") {
     loadSummaryIntoView();
   }
-
-  return true;
 }
 
 window.showPage = showPage;
 
 /* =========================================================
-   6. 수학 수식
+   5. 수학 수식
 ========================================================= */
 
 function renderMathText(value) {
@@ -266,14 +254,7 @@ function renderMathText(value) {
             displayMode: display !== undefined,
             throwOnError: false,
             strict: "ignore",
-            trust: false,
-            macros: {
-              "\\R": "\\mathbb{R}",
-              "\\N": "\\mathbb{N}",
-              "\\Z": "\\mathbb{Z}",
-              "\\Q": "\\mathbb{Q}",
-              "\\C": "\\mathbb{C}"
-            }
+            trust: false
           }
         );
 
@@ -281,8 +262,7 @@ function renderMathText(value) {
           ? `<div class="math-display">${rendered}</div>`
           : `<span class="math-inline">${rendered}</span>`;
 
-      } catch (error) {
-        console.warn("수식 렌더링 오류:", error);
+      } catch {
         html += escapeHTML(expression);
       }
     } else {
@@ -316,23 +296,20 @@ function renderAllMath(root = document) {
       ],
       throwOnError: false,
       ignoredTags: [
-        "script",
-        "noscript",
-        "style",
-        "textarea",
-        "pre",
-        "code"
+        "script", "noscript", "style",
+        "textarea", "pre", "code"
       ]
     });
   } catch (error) {
-    console.warn("KaTeX 오류:", error);
+    console.warn("수식 렌더링 오류:", error);
   }
 }
 
+window.renderRichText = renderRichText;
 window.renderAllMath = renderAllMath;
 
 /* =========================================================
-   7. 이미지 선택
+   6. 이미지 선택
 ========================================================= */
 
 function handleFileSelect(event) {
@@ -352,31 +329,15 @@ function handleFileSelect(event) {
 
   if (!file) return;
 
-  const allowedTypes = [
-    "image/jpeg",
-    "image/png",
-    "image/webp"
-  ];
-
-  if (!allowedTypes.includes(file.type)) {
+  if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
     event.target.value = "";
-
-    showToast(
-      "JPG, PNG, WEBP 이미지 파일만 선택할 수 있습니다.",
-      "error"
-    );
-
+    showToast("JPG, PNG, WEBP 이미지만 선택해 주세요.", "error");
     return;
   }
 
   if (file.size > 8 * 1024 * 1024) {
     event.target.value = "";
-
-    showToast(
-      "이미지는 8MB 이하의 파일을 선택해 주세요.",
-      "error"
-    );
-
+    showToast("이미지는 8MB 이하로 선택해 주세요.", "error");
     return;
   }
 
@@ -395,7 +356,7 @@ function handleFileSelect(event) {
     };
 
     reader.onerror = () => {
-      showToast("이미지 미리보기를 불러오지 못했습니다.", "error");
+      showToast("이미지 미리보기에 실패했습니다.", "error");
     };
 
     reader.readAsDataURL(file);
@@ -407,7 +368,7 @@ function handleFileSelect(event) {
 window.handleFileSelect = handleFileSelect;
 
 /* =========================================================
-   8. OCR
+   7. OCR
 ========================================================= */
 
 async function runOCR(file) {
@@ -423,15 +384,11 @@ async function runOCR(file) {
     {
       logger(info) {
         if (info.status === "recognizing text") {
-          const percent = Math.round(
-            (info.progress || 0) * 100
-          );
-
+          const percent = Math.round((info.progress || 0) * 100);
           const label = $("loading")?.querySelector(".loading-text");
 
           if (label) {
-            label.textContent =
-              `사진 글자 인식 중... ${percent}%`;
+            label.textContent = `사진 글자 인식 중... ${percent}%`;
           }
         }
       }
@@ -442,223 +399,7 @@ async function runOCR(file) {
 }
 
 /* =========================================================
-   9. 배열 데이터 정리
-========================================================= */
-
-function normalizeArray(value) {
-  if (Array.isArray(value)) {
-    return value.map(item => {
-      if (typeof item === "string") return item;
-
-      if (item && typeof item === "object") {
-        if (item.term && item.meaning) {
-          return `${item.term}: ${item.meaning}`;
-        }
-
-        return (
-          item.text ||
-          item.content ||
-          item.title ||
-          JSON.stringify(item)
-        );
-      }
-
-      return String(item ?? "");
-    }).filter(Boolean);
-  }
-
-  if (typeof value === "string") {
-    return value.split(/\n+/).filter(Boolean);
-  }
-
-  return [];
-}
-
-/* =========================================================
-   10. 자료 분석
-========================================================= */
-
-async function analyzeStudyMaterial() {
-  if (isLoading) return;
-
-  const file =
-    selectedFile ||
-    $("fileInput")?.files?.[0] ||
-    null;
-
-  const title =
-    $("fileName")?.textContent.replace(
-      /^선택된 파일:\s*/,
-      ""
-    ) || "나의 공부 자료";
-
-  if (!file) {
-    showToast("먼저 공부 자료 이미지를 선택해 주세요.", "error");
-    return;
-  }
-
-  const button = $("uploadButton");
-  const originalLabel = button?.textContent;
-
-  setLoading(true, "공부 자료를 준비하고 있습니다...");
-
-  try {
-    const ocrText = await runOCR(file);
-
-    if (ocrText.length < 3) {
-      throw new Error(
-        "사진에서 글자를 충분히 인식하지 못했습니다. 더 선명한 사진으로 다시 시도해 주세요."
-      );
-    }
-
-    const form = new FormData();
-
-    form.append("title", title);
-    form.append("text", ocrText);
-    form.append("images", file);
-
-    const response = await fetch(API.study, {
-      method: "POST",
-      body: form
-    });
-
-    const data = await readResponse(response);
-
-    if (
-      !data.summary ||
-      (Array.isArray(data.summary) && !data.summary.length)
-    ) {
-      throw new Error("AI 분석 결과가 비어 있습니다.");
-    }
-
-    currentTitle = String(data.title || title);
-    currentStudyText = String(
-      data.studyMaterial || ocrText
-    );
-
-    currentQuestions = (
-      Array.isArray(data.questions) ? data.questions : []
-    )
-      .map(normalizeQuestion)
-      .filter(Boolean);
-
-    if (!currentQuestions.length) {
-      throw new Error(
-        "문제를 생성하지 못했습니다. 자료를 다시 등록해 주세요."
-      );
-    }
-
-    const saved = {
-      title: currentTitle,
-      summary: normalizeArray(data.summary),
-      keyTerms: normalizeArray(data.keyTerms),
-      reviewPoints: normalizeArray(data.reviewPoints)
-    };
-
-    safeStorageSet(STORAGE.summary, JSON.stringify(saved));
-    safeStorageSet(STORAGE.title, currentTitle);
-    safeStorageSet(STORAGE.questions, JSON.stringify(currentQuestions));
-    safeStorageSet(STORAGE.sourceText, currentStudyText);
-
-    incrementDocumentCount();
-
-    displaySummary(saved);
-    showPage("summary");
-
-    showToast(
-      `분석 완료! AI가 ${currentQuestions.length}개 문제를 만들었습니다.`,
-      "success"
-    );
-
-  } catch (error) {
-    console.error("자료 분석 실패:", error);
-
-    showToast(
-      error.message || "자료 분석 중 오류가 발생했습니다.",
-      "error"
-    );
-
-  } finally {
-    setLoading(false);
-
-    if (button && originalLabel) {
-      button.textContent = originalLabel;
-    }
-  }
-}
-
-window.analyzeStudyMaterial = analyzeStudyMaterial;
-
-/* =========================================================
-   11. 요약 화면
-========================================================= */
-
-function displaySummary(data) {
-  const container = $("summaryContent");
-
-  if (!container || !data) return;
-
-  const summary = normalizeArray(data.summary);
-  const terms = normalizeArray(data.keyTerms);
-  const points = normalizeArray(data.reviewPoints);
-
-  const sections = [];
-
-  if (data.title) {
-    sections.push(`<h2>${escapeHTML(data.title)}</h2>`);
-  }
-
-  sections.push("<h3>핵심 요약</h3>");
-
-  sections.push(
-    summary.length
-      ? `<ul>${summary.map(item =>
-          `<li>${renderRichText(item)}</li>`
-        ).join("")}</ul>`
-      : "<p>요약 내용이 없습니다.</p>"
-  );
-
-  sections.push("<h3>중요 용어</h3>");
-
-  sections.push(
-    terms.length
-      ? `<ul>${terms.map(item =>
-          `<li>${renderRichText(item)}</li>`
-        ).join("")}</ul>`
-      : "<p>중요 용어가 없습니다.</p>"
-  );
-
-  sections.push("<h3>시험 대비 포인트</h3>");
-
-  sections.push(
-    points.length
-      ? `<ul>${points.map(item =>
-          `<li>${renderRichText(item)}</li>`
-        ).join("")}</ul>`
-      : "<p>복습 포인트가 없습니다.</p>"
-  );
-
-  container.innerHTML = sections.join("");
-
-  renderAllMath(container);
-}
-
-window.displaySummary = displaySummary;
-
-function loadSummaryIntoView() {
-  try {
-    const raw = safeStorageGet(STORAGE.summary);
-
-    if (!raw) return;
-
-    displaySummary(JSON.parse(raw));
-  } catch (error) {
-    console.warn("요약 불러오기 실패:", error);
-  }
-}
-
-/* =========================================================
-   12. 문제 정규화
+   8. 문제 정규화
 ========================================================= */
 
 function normalizeQuestion(q) {
@@ -712,64 +453,308 @@ function normalizeQuestion(q) {
 }
 
 /* =========================================================
-   13. 퀴즈 시작
+   9. 자료 분석
 ========================================================= */
 
-function generateQuiz(count = 10) {
-  try {
-    if (!currentQuestions.length) {
-      currentQuestions = JSON.parse(
-        safeStorageGet(STORAGE.questions, "[]")
-      )
-        .map(normalizeQuestion)
-        .filter(Boolean);
-    }
-  } catch {
-    currentQuestions = [];
+async function analyzeStudyMaterial() {
+  if (isLoading) return;
+
+  const file =
+    selectedFile ||
+    $("fileInput")?.files?.[0] ||
+    null;
+
+  if (!file) {
+    showToast("먼저 공부 자료 이미지를 선택해 주세요.", "error");
+    return;
   }
 
-  if (!currentQuestions.length) {
+  const title =
+    $("fileName")?.textContent.replace(
+      /^선택된 파일:\s*/,
+      ""
+    ) || "나의 공부 자료";
+
+  setLoading(true, "사진 글자를 인식하고 있습니다...");
+
+  try {
+    const ocrText = await runOCR(file);
+
+    if (ocrText.length < 3) {
+      throw new Error(
+        "사진에서 글자를 충분히 인식하지 못했습니다. 더 선명한 사진을 등록해 주세요."
+      );
+    }
+
+    const form = new FormData();
+
+    form.append("title", title);
+    form.append("text", ocrText);
+    form.append("images", file);
+
+    const response = await fetch(API.study, {
+      method: "POST",
+      body: form
+    });
+
+    const data = await readResponse(response);
+
+    const summary = normalizeArray(data.summary);
+
+    if (!summary.length) {
+      throw new Error("AI 분석 결과가 비어 있습니다.");
+    }
+
+    currentTitle = String(data.title || title);
+    currentStudyText = String(
+      data.studyMaterial || ocrText
+    );
+
+    // 전체 문제를 보존합니다.
+    allQuestions = (Array.isArray(data.questions)
+      ? data.questions
+      : []
+    ).map(normalizeQuestion).filter(Boolean);
+
+    // 현재 시험 문제도 전체 문제로 초기화합니다.
+    currentQuestions = [...allQuestions];
+
+    if (!allQuestions.length) {
+      throw new Error(
+        "문제가 생성되지 않았습니다. 자료를 다시 분석해 주세요."
+      );
+    }
+
+    const saved = {
+      title: currentTitle,
+      summary,
+      keyTerms: normalizeArray(data.keyTerms),
+      reviewPoints: normalizeArray(data.reviewPoints)
+    };
+
+    localStorage.setItem(STORAGE.summary, JSON.stringify(saved));
+    localStorage.setItem(STORAGE.title, currentTitle);
+    localStorage.setItem(STORAGE.questions, JSON.stringify(allQuestions));
+    localStorage.setItem(STORAGE.sourceText, currentStudyText);
+
+    // 새 자료 분석 시 이전 시험 오답 초기화
+    wrongAnswers = [];
+    localStorage.setItem(STORAGE.wrong, "[]");
+
+    incrementDocumentCount();
+    displaySummary(saved);
+    showPage("summary");
+
     showToast(
-      "먼저 자료 업로드 메뉴에서 공부 자료를 분석해 주세요.",
+      `분석 완료! 총 ${allQuestions.length}개 문제가 생성되었습니다.`,
+      "success"
+    );
+
+  } catch (error) {
+    console.error("자료 분석 실패:", error);
+    showToast(
+      error.message || "자료 분석 중 오류가 발생했습니다.",
+      "error"
+    );
+
+  } finally {
+    setLoading(false);
+  }
+}
+
+window.analyzeStudyMaterial = analyzeStudyMaterial;
+
+/* =========================================================
+   10. 요약 화면
+========================================================= */
+
+function displaySummary(data) {
+  const container = $("summaryContent");
+  if (!container || !data) return;
+
+  const summary = normalizeArray(data.summary);
+  const terms = normalizeArray(data.keyTerms);
+  const points = normalizeArray(data.reviewPoints);
+
+  const sections = [];
+
+  if (data.title) {
+    sections.push(`<h2>${escapeHTML(data.title)}</h2>`);
+  }
+
+  sections.push("<h3>핵심 요약</h3>");
+
+  sections.push(
+    summary.length
+      ? `<ul>${summary.map(item =>
+          `<li>${renderRichText(item)}</li>`
+        ).join("")}</ul>`
+      : "<p>요약 내용이 없습니다.</p>"
+  );
+
+  sections.push("<h3>중요 용어</h3>");
+
+  sections.push(
+    terms.length
+      ? `<ul>${terms.map(item =>
+          `<li>${renderRichText(item)}</li>`
+        ).join("")}</ul>`
+      : "<p>중요 용어가 없습니다.</p>"
+  );
+
+  sections.push("<h3>시험 대비 포인트</h3>");
+
+  sections.push(
+    points.length
+      ? `<ul>${points.map(item =>
+          `<li>${renderRichText(item)}</li>`
+        ).join("")}</ul>`
+      : "<p>복습 포인트가 없습니다.</p>"
+  );
+
+  container.innerHTML = sections.join("");
+  renderAllMath(container);
+}
+
+window.displaySummary = displaySummary;
+
+function loadSummaryIntoView() {
+  try {
+    const raw = localStorage.getItem(STORAGE.summary);
+    if (raw) displaySummary(JSON.parse(raw));
+  } catch (error) {
+    console.warn("요약 불러오기 실패:", error);
+  }
+}
+
+/* =========================================================
+   11. 문제 개수 읽기
+========================================================= */
+
+function getSelectedQuestionCount(count) {
+  // 함수에 직접 숫자가 전달되면 그 값을 사용합니다.
+  if (
+    count !== undefined &&
+    count !== null &&
+    count !== ""
+  ) {
+    const parsed = Number(count);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return Math.min(100, Math.floor(parsed));
+    }
+  }
+
+  // HTML의 문제 수 선택 요소를 확인합니다.
+  const selectors = [
+    "questionCount",
+    "questionCountSelect",
+    "quizCount",
+    "problemCount",
+    "question-count"
+  ];
+
+  for (const id of selectors) {
+    const element = $(id);
+
+    if (element && element.value) {
+      const parsed = Number(element.value);
+
+      if (Number.isFinite(parsed) && parsed > 0) {
+        return Math.min(100, Math.floor(parsed));
+      }
+    }
+  }
+
+  // 클래스 이름으로도 확인합니다.
+  const classElement = document.querySelector(
+    ".question-count, .quiz-count, [name='questionCount']"
+  );
+
+  if (classElement?.value) {
+    const parsed = Number(classElement.value);
+
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return Math.min(100, Math.floor(parsed));
+    }
+  }
+
+  return 10;
+}
+
+/* =========================================================
+   12. 퀴즈 생성 및 시작
+========================================================= */
+
+function generateQuiz(count) {
+  if (isLoading) return;
+
+  const requestedCount = getSelectedQuestionCount(count);
+
+  // 저장된 전체 문제 불러오기
+  try {
+    if (!allQuestions.length) {
+      allQuestions = JSON.parse(
+        localStorage.getItem(STORAGE.questions) || "[]"
+      ).map(normalizeQuestion).filter(Boolean);
+    }
+  } catch {
+    allQuestions = [];
+  }
+
+  if (!allQuestions.length) {
+    showToast(
+      "먼저 자료 업로드에서 공부 자료를 분석해 주세요.",
       "error"
     );
     return;
   }
 
-  const requestedCount = Math.max(
-    1,
-    Math.min(100, Number(count) || 10)
-  );
-
-  if (currentQuestions.length < requestedCount) {
+  // 선택한 문제 수보다 실제 생성된 문제가 적은 경우
+  if (allQuestions.length < requestedCount) {
     showToast(
-      `현재 생성된 문제는 ${currentQuestions.length}개입니다. 생성된 문제를 출제합니다.`,
-      "info"
+      `현재 생성된 문제는 ${allQuestions.length}개입니다. ${requestedCount}개를 풀려면 먼저 문제를 더 생성해야 합니다.`,
+      "error"
     );
+    return;
   }
+
+  // 중요: allQuestions를 자르지 않고 복사해서 사용합니다.
+  currentQuestions = allQuestions.slice(0, requestedCount);
 
   currentQuestionIndex = 0;
   userAnswers = new Array(currentQuestions.length).fill(null);
-  wrongAnswers = [];
   quizFinished = false;
+  wrongAnswers = [];
 
   const area = $("quizArea");
 
-  if (area) area.style.display = "block";
+  if (area) {
+    area.style.display = "block";
+  }
+
+  const result = $("resultContent");
+
+  if (result) {
+    result.innerHTML = "";
+  }
 
   showPage("quiz");
   displayQuizQuestion();
+
+  showToast(
+    `${currentQuestions.length}문제 시험이 시작되었습니다.`,
+    "success"
+  );
 }
 
 window.generateQuiz = generateQuiz;
 
 /* =========================================================
-   14. 문제 표시
+   13. 문제 표시
 ========================================================= */
 
 function displayQuizQuestion() {
   const q = currentQuestions[currentQuestionIndex];
-
   if (!q) return;
 
   const number = $("questionNumber");
@@ -793,7 +778,8 @@ function displayQuizQuestion() {
 
   if (options) {
     options.innerHTML = q.options.map((option, index) => {
-      const selected = userAnswers[currentQuestionIndex] === index;
+      const selected =
+        userAnswers[currentQuestionIndex] === index;
 
       return `
         <button
@@ -833,10 +819,9 @@ function displayQuizQuestion() {
     $("quizArea")?.appendChild(feedback);
   }
 
-  feedback.style.display =
-    userAnswers[currentQuestionIndex] === null ? "none" : "block";
-
-  if (userAnswers[currentQuestionIndex] !== null) {
+  if (userAnswers[currentQuestionIndex] === null) {
+    feedback.style.display = "none";
+  } else {
     showQuizFeedback();
   }
 
@@ -844,7 +829,7 @@ function displayQuizQuestion() {
 }
 
 /* =========================================================
-   15. 정답 선택
+   14. 정답 선택
 ========================================================= */
 
 function chooseAnswer(index) {
@@ -884,7 +869,7 @@ function chooseAnswer(index) {
 window.chooseAnswer = chooseAnswer;
 
 /* =========================================================
-   16. 정답 해설
+   15. 정답 해설
 ========================================================= */
 
 function showQuizFeedback() {
@@ -902,14 +887,10 @@ function showQuizFeedback() {
     <strong style="color:${correct ? "#18a66a" : "#ed5364"}">
       ${correct ? "정답입니다!" : "틀렸습니다."}
     </strong>
-
     <br>
-
     <b>정답:</b>
     ${renderRichText(q.options[q.answer])}
-
     <br>
-
     <b>해설:</b>
     ${renderRichText(q.explanation)}
   `;
@@ -918,7 +899,7 @@ function showQuizFeedback() {
 }
 
 /* =========================================================
-   17. 다음 문제
+   16. 다음 문제
 ========================================================= */
 
 function nextQuestion() {
@@ -940,7 +921,7 @@ function nextQuestion() {
 window.nextQuestion = nextQuestion;
 
 /* =========================================================
-   18. 이전 문제
+   17. 이전 문제
 ========================================================= */
 
 function previousQuestion() {
@@ -955,16 +936,11 @@ function previousQuestion() {
 window.previousQuestion = previousQuestion;
 
 /* =========================================================
-   19. 시험 결과
+   18. 시험 결과
 ========================================================= */
 
 function finishQuiz() {
   if (quizFinished) return;
-
-  if (userAnswers.some(answer => answer === null)) {
-    showToast("아직 풀지 않은 문제가 있습니다.", "error");
-    return;
-  }
 
   quizFinished = true;
 
@@ -987,14 +963,12 @@ function finishQuiz() {
     }
   });
 
-  // 오답노트 저장
-  safeStorageSet(
+  localStorage.setItem(
     STORAGE.wrong,
     JSON.stringify(wrongAnswers)
   );
 
   const total = currentQuestions.length;
-
   const score = total
     ? Math.round(correct / total * 100)
     : 0;
@@ -1005,16 +979,11 @@ function finishQuiz() {
     result.innerHTML = `
       <div class="result-card">
         <h3>학습 결과</h3>
-
-        <div class="result-score">
-          ${score}점
-        </div>
-
+        <div class="result-score">${score}점</div>
         <p>
           총 ${total}문제 중
           정답 ${correct}개 · 오답 ${total - correct}개
         </p>
-
         <p>
           ${
             score >= 90
@@ -1024,28 +993,11 @@ function finishQuiz() {
                 : "틀린 문제를 다시 복습해 보세요."
           }
         </p>
-
-        <button
-          type="button"
-          class="primary-button"
-          onclick="showWrongAnswers()"
-        >
-          오답 확인하기
-        </button>
-
-        <button
-          type="button"
-          class="secondary-button"
-          onclick="generateQuiz()"
-        >
-          다시 풀기
-        </button>
       </div>
     `;
   }
 
   updateStudyStats(total, correct);
-
   renderWrongAnswers();
 
   showPage("quizResult");
@@ -1056,28 +1008,18 @@ function finishQuiz() {
 window.finishQuiz = finishQuiz;
 
 /* =========================================================
-   20. 오답노트 렌더링
+   19. 오답노트
 ========================================================= */
 
 function renderWrongAnswers() {
   const container = $("wrongList");
-
-  if (!container) {
-    console.warn(
-      "오답노트 영역 wrongList를 찾을 수 없습니다."
-    );
-    return;
-  }
+  if (!container) return;
 
   try {
-    const saved = JSON.parse(
-      safeStorageGet(STORAGE.wrong, "[]")
+    wrongAnswers = JSON.parse(
+      localStorage.getItem(STORAGE.wrong) || "[]"
     );
-
-    wrongAnswers = Array.isArray(saved) ? saved : [];
-
-  } catch (error) {
-    console.error("오답노트 불러오기 실패:", error);
+  } catch {
     wrongAnswers = [];
   }
 
@@ -1091,21 +1033,16 @@ function renderWrongAnswers() {
   }
 
   container.innerHTML = wrongAnswers.map((item, index) => {
-    const options = Array.isArray(item.options)
-      ? item.options
-      : [];
-
     const selected =
       item.selected == null
         ? "미응답"
-        : options[item.selected] || "미응답";
+        : item.options?.[item.selected] || "미응답";
 
     const correct =
-      options[item.answer] || "정답 정보 없음";
+      item.options?.[item.answer] || "정답 정보 없음";
 
     return `
       <article class="wrong-card">
-
         <h3>문제 ${index + 1}</h3>
 
         <div class="wrong-question">
@@ -1124,7 +1061,6 @@ function renderWrongAnswers() {
           <b>해설</b><br>
           ${renderRichText(item.explanation)}
         </div>
-
       </article>
     `;
   }).join("");
@@ -1132,30 +1068,13 @@ function renderWrongAnswers() {
   renderAllMath(container);
 }
 
-/* =========================================================
-   21. 오답노트 이동
-========================================================= */
-
-function showWrongAnswers() {
+window.showWrongAnswers = function () {
+  showPage("wrong");
   renderWrongAnswers();
-
-  const moved = showPage("wrong");
-
-  if (moved) {
-    showToast(
-      wrongAnswers.length
-        ? `${wrongAnswers.length}개의 오답을 불러왔습니다.`
-        : "아직 저장된 오답이 없습니다.",
-      "success"
-    );
-  }
-}
-
-window.showWrongAnswers = showWrongAnswers;
-window.renderWrongAnswers = renderWrongAnswers;
+};
 
 /* =========================================================
-   22. 오답 다시 풀기
+   20. 오답 다시 풀기
 ========================================================= */
 
 function retryWrongAnswers() {
@@ -1166,25 +1085,13 @@ function retryWrongAnswers() {
     return;
   }
 
+  // 오답 문제만 현재 시험 문제로 사용합니다.
   currentQuestions = wrongAnswers.map(item => ({
-    question: String(item.question || ""),
-    options: Array.isArray(item.options)
-      ? item.options.map(String)
-      : [],
-    answer: Number(item.answer),
-    explanation: String(item.explanation || "")
-  })).filter(q =>
-    q.question &&
-    q.options.length >= 2 &&
-    Number.isInteger(q.answer) &&
-    q.answer >= 0 &&
-    q.answer < q.options.length
-  );
-
-  if (!currentQuestions.length) {
-    showToast("오답 데이터를 불러오지 못했습니다.", "error");
-    return;
-  }
+    question: item.question,
+    options: item.options,
+    answer: item.answer,
+    explanation: item.explanation
+  }));
 
   currentQuestionIndex = 0;
   userAnswers = new Array(currentQuestions.length).fill(null);
@@ -1200,12 +1107,17 @@ function retryWrongAnswers() {
 
   showPage("quiz");
   displayQuizQuestion();
+
+  showToast(
+    `${currentQuestions.length}개의 오답을 다시 풉니다.`,
+    "success"
+  );
 }
 
 window.retryWrongAnswers = retryWrongAnswers;
 
 /* =========================================================
-   23. AI 채팅
+   21. AI 채팅
 ========================================================= */
 
 async function sendChat(message) {
@@ -1222,14 +1134,6 @@ async function sendChat(message) {
     return;
   }
 
-  const studyMaterial =
-    currentStudyText || getSavedStudyText();
-
-  if (!studyMaterial.trim()) {
-    showToast("먼저 공부 자료를 등록해 주세요.", "error");
-    return;
-  }
-
   if (input) input.value = "";
 
   addChatMessage(text, "user");
@@ -1239,12 +1143,17 @@ async function sendChat(message) {
   try {
     const response = await fetch(API.chat, {
       method: "POST",
+
       headers: {
         "Content-Type": "application/json"
       },
+
       body: JSON.stringify({
-        studyMaterial,
+        studyMaterial:
+          currentStudyText || getSavedStudyText(),
+
         message: text,
+
         messages: chatHistory
       })
     });
@@ -1252,10 +1161,7 @@ async function sendChat(message) {
     const data = await readResponse(response);
 
     const reply = String(
-      data.reply ||
-      data.answer ||
-      data.message ||
-      ""
+      data.reply || data.answer || data.message || ""
     ).trim();
 
     if (!reply) {
@@ -1271,7 +1177,7 @@ async function sendChat(message) {
 
     chatHistory = chatHistory.slice(-24);
 
-    safeStorageSet(
+    localStorage.setItem(
       STORAGE.chat,
       JSON.stringify(chatHistory)
     );
@@ -1301,12 +1207,11 @@ window.requestAIChat = requestAIChat;
 window.sendChatMessage = sendChatMessage;
 
 /* =========================================================
-   24. 채팅 메시지 출력
+   22. 채팅 출력
 ========================================================= */
 
 function addChatMessage(message, role = "assistant") {
   const container = $("chatMessages");
-
   if (!container) return;
 
   const item = document.createElement("div");
@@ -1315,6 +1220,7 @@ function addChatMessage(message, role = "assistant") {
     `chat-message ${role === "user" ? "user" : "assistant"}`;
 
   const content = document.createElement("div");
+
   content.className = "message-content";
   content.innerHTML = renderRichText(message);
 
@@ -1328,12 +1234,9 @@ function addChatMessage(message, role = "assistant") {
 
 function loadChatHistory() {
   try {
-    const saved = JSON.parse(
-      safeStorageGet(STORAGE.chat, "[]")
+    chatHistory = JSON.parse(
+      localStorage.getItem(STORAGE.chat) || "[]"
     );
-
-    chatHistory = Array.isArray(saved) ? saved : [];
-
   } catch {
     chatHistory = [];
   }
@@ -1345,28 +1248,22 @@ function loadChatHistory() {
   container.innerHTML = "";
 
   chatHistory.forEach(item => {
-    if (
-      item &&
-      typeof item.content === "string" &&
-      ["user", "assistant"].includes(item.role)
-    ) {
-      addChatMessage(item.content, item.role);
-    }
+    addChatMessage(item.content, item.role);
   });
 }
 
 /* =========================================================
-   25. 저장된 학습 자료
+   23. 저장된 공부 자료
 ========================================================= */
 
 function getSavedStudyText() {
-  const rawText = safeStorageGet(STORAGE.sourceText);
+  const rawText = localStorage.getItem(STORAGE.sourceText);
 
   if (rawText) return rawText;
 
   try {
     const data = JSON.parse(
-      safeStorageGet(STORAGE.summary, "{}")
+      localStorage.getItem(STORAGE.summary) || "{}"
     );
 
     return [
@@ -1381,24 +1278,24 @@ function getSavedStudyText() {
 }
 
 /* =========================================================
-   26. 통계
+   24. 통계
 ========================================================= */
 
 function getStats() {
   try {
-    const stats = JSON.parse(
-      safeStorageGet(STORAGE.stats, "{}")
+    return JSON.parse(
+      localStorage.getItem(STORAGE.stats) || "{}"
     );
-
-    return stats && typeof stats === "object" ? stats : {};
-
   } catch {
     return {};
   }
 }
 
 function saveStats(stats) {
-  safeStorageSet(STORAGE.stats, JSON.stringify(stats));
+  localStorage.setItem(
+    STORAGE.stats,
+    JSON.stringify(stats)
+  );
 }
 
 function incrementDocumentCount() {
@@ -1419,7 +1316,7 @@ function updateStudyStats(solved, correct) {
 }
 
 /* =========================================================
-   27. 초기화
+   25. 초기화
 ========================================================= */
 
 function initializeApp() {
@@ -1434,7 +1331,10 @@ function initializeApp() {
   const uploadButton = $("uploadButton");
 
   if (uploadButton) {
-    uploadButton.addEventListener("click", analyzeStudyMaterial);
+    uploadButton.addEventListener(
+      "click",
+      analyzeStudyMaterial
+    );
   }
 
   const chatButton = $("chatSend");
@@ -1454,29 +1354,30 @@ function initializeApp() {
     });
   }
 
+  // 저장된 요약
   loadSummaryIntoView();
 
+  // 저장된 전체 문제 복구
   try {
-    currentQuestions = JSON.parse(
-      safeStorageGet(STORAGE.questions, "[]")
-    )
-      .map(normalizeQuestion)
-      .filter(Boolean);
+    allQuestions = JSON.parse(
+      localStorage.getItem(STORAGE.questions) || "[]"
+    ).map(normalizeQuestion).filter(Boolean);
   } catch {
-    currentQuestions = [];
+    allQuestions = [];
   }
 
-  currentTitle = safeStorageGet(STORAGE.title, "");
+  // 시험을 시작하기 전에는 전체 문제를 유지합니다.
+  currentQuestions = [...allQuestions];
+
+  currentTitle =
+    localStorage.getItem(STORAGE.title) || "";
+
   currentStudyText = getSavedStudyText();
 
   try {
-    const savedWrong = JSON.parse(
-      safeStorageGet(STORAGE.wrong, "[]")
+    wrongAnswers = JSON.parse(
+      localStorage.getItem(STORAGE.wrong) || "[]"
     );
-
-    wrongAnswers = Array.isArray(savedWrong)
-      ? savedWrong
-      : [];
   } catch {
     wrongAnswers = [];
   }
@@ -1491,11 +1392,13 @@ function initializeApp() {
     loading.style.display = "none";
   }
 
-  console.log("공부킬러 초기화 완료");
+  console.log(
+    `공부킬러 초기화 완료 - 저장된 문제 ${allQuestions.length}개`
+  );
 }
 
 /* =========================================================
-   28. 전역 함수 연결
+   26. 전역 함수 연결
 ========================================================= */
 
 window.showPage = showPage;
@@ -1508,8 +1411,7 @@ window.nextQuestion = nextQuestion;
 window.previousQuestion = previousQuestion;
 window.finishQuiz = finishQuiz;
 
-window.showWrongAnswers = showWrongAnswers;
-window.renderWrongAnswers = renderWrongAnswers;
+window.showWrongAnswers = window.showWrongAnswers;
 window.retryWrongAnswers = retryWrongAnswers;
 
 window.requestAIChat = requestAIChat;
@@ -1520,14 +1422,13 @@ window.renderRichText = renderRichText;
 window.renderAllMath = renderAllMath;
 
 /* =========================================================
-   29. 실행
+   27. 실행
 ========================================================= */
 
 if (document.readyState === "loading") {
   document.addEventListener(
     "DOMContentLoaded",
-    initializeApp,
-    { once: true }
+    initializeApp
   );
 } else {
   initializeApp();
