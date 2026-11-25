@@ -1,7 +1,13 @@
 
 /* =========================================================
    공부킬러 - public/app.js
-   자료 인식 / AI 요약 / 선택 문제 수 생성 / 퀴즈 / 오답 / 채팅
+   AI 채팅 자동 초기화 버전
+   - 자료 업로드 및 분석
+   - AI 요약 및 문제 생성
+   - 퀴즈 및 채점
+   - 오답 노트
+   - AI 채팅
+   - 페이지를 새로 열 때 AI 채팅 기록만 초기화
 ========================================================= */
 
 (() => {
@@ -68,6 +74,32 @@
     }
   };
 
+  /* =========================================================
+     AI 채팅 자동 초기화
+     페이지를 새로 열 때 이전 대화만 삭제
+  ========================================================= */
+
+  function resetChatHistory() {
+    state.chatHistory = [];
+
+    try {
+      localStorage.removeItem(STORAGE.chat);
+    } catch (error) {
+      console.warn('채팅 기록 초기화 실패:', error);
+    }
+
+    const messages = $('chatMessages', 'chat-messages');
+    const input = $('chatInput', 'chat-input', 'messageInput');
+
+    if (messages) {
+      messages.innerHTML = '';
+    }
+
+    if (input) {
+      input.value = '';
+    }
+  }
+
   function showMessage(message) {
     const loading = $('loading', 'loading-overlay');
 
@@ -111,6 +143,10 @@
     alert(message);
   }
 
+  /* =========================================================
+     문제 수 선택
+  ========================================================= */
+
   function getSelectedCount() {
     const selectors = [
       'questionCount',
@@ -125,8 +161,12 @@
       const element = document.getElementById(id);
       if (!element) continue;
 
-      if (element.tagName === 'SELECT' || element.tagName === 'INPUT') {
+      if (
+        element.tagName === 'SELECT' ||
+        element.tagName === 'INPUT'
+      ) {
         const value = Number(element.value);
+
         if (Number.isInteger(value) && value > 0) {
           return Math.min(value, 100);
         }
@@ -174,11 +214,13 @@
   }
 
   function setSelectedCount(count) {
-    state.selectedCount = Math.max(1, Math.min(100, Number(count) || 20));
+    state.selectedCount = Math.max(
+      1,
+      Math.min(100, Number(count) || 20)
+    );
 
     document.querySelectorAll('[data-count]').forEach(button => {
       const value = Number(button.dataset.count);
-
       const selected = value === state.selectedCount;
 
       button.classList.toggle('active', selected);
@@ -197,14 +239,18 @@
     selectors.forEach(id => {
       const element = document.getElementById(id);
 
-      if (element && (
-        element.tagName === 'SELECT' ||
-        element.tagName === 'INPUT'
-      )) {
+      if (
+        element &&
+        (element.tagName === 'SELECT' || element.tagName === 'INPUT')
+      ) {
         element.value = String(state.selectedCount);
       }
     });
   }
+
+  /* =========================================================
+     문제 데이터 정리
+  ========================================================= */
 
   function normalizeQuestion(question, index) {
     if (!question || typeof question !== 'object') return null;
@@ -240,6 +286,10 @@
     };
   }
 
+  /* =========================================================
+     파일 업로드
+  ========================================================= */
+
   function getFileInput() {
     return $('fileInput', 'quiz-doc', 'file-input', 'imageInput');
   }
@@ -259,6 +309,7 @@
 
       state.files.forEach(file => {
         const image = document.createElement('img');
+
         image.alt = file.name;
         image.style.width = '100px';
         image.style.height = '100px';
@@ -280,7 +331,9 @@
 
     if (!files.length) return;
 
-    const images = files.filter(file => file.type.startsWith('image/'));
+    const images = files.filter(file =>
+      file.type.startsWith('image/')
+    );
 
     if (images.length !== files.length) {
       showError('이미지 파일만 업로드할 수 있습니다.');
@@ -292,7 +345,9 @@
       return;
     }
 
-    const tooLarge = images.find(file => file.size > 8 * 1024 * 1024);
+    const tooLarge = images.find(file =>
+      file.size > 8 * 1024 * 1024
+    );
 
     if (tooLarge) {
       showError('이미지 한 장의 용량은 8MB 이하여야 합니다.');
@@ -323,15 +378,24 @@
       'study-title'
     );
 
-    return titleInput ? titleInput.value.trim() : '학습 자료';
+    return titleInput
+      ? titleInput.value.trim()
+      : '학습 자료';
   }
+
+  /* =========================================================
+     학습 자료 분석 및 문제 생성
+  ========================================================= */
 
   async function analyzeStudyMaterial(requestedCount = null) {
     if (state.busy) return;
 
     const count = Math.max(
       1,
-      Math.min(100, Number(requestedCount) || getSelectedCount())
+      Math.min(
+        100,
+        Number(requestedCount) || getSelectedCount()
+      )
     );
 
     const typedText = getTypedText();
@@ -351,7 +415,10 @@
       formData.append('images', file);
     });
 
-    setBusy(true, '자료를 인식하고 있습니다. 잠시만 기다려 주세요.');
+    setBusy(
+      true,
+      '자료를 인식하고 있습니다. 잠시만 기다려 주세요.'
+    );
 
     try {
       const response = await fetch(API.study, {
@@ -375,9 +442,7 @@
       }
 
       const receivedQuestions = Array.isArray(data.questions)
-        ? data.questions
-            .map(normalizeQuestion)
-            .filter(Boolean)
+        ? data.questions.map(normalizeQuestion).filter(Boolean)
         : [];
 
       if (receivedQuestions.length !== count) {
@@ -403,7 +468,9 @@
 
     } catch (error) {
       console.error(error);
-      showError(error.message || '자료 분석 중 오류가 발생했습니다.');
+      showError(
+        error.message || '자료 분석 중 오류가 발생했습니다.'
+      );
     } finally {
       setBusy(false);
     }
@@ -421,6 +488,10 @@
     });
   }
 
+  /* =========================================================
+     요약 화면
+  ========================================================= */
+
   function renderSummary(data) {
     const summaryArea = $(
       'summaryContent',
@@ -430,8 +501,9 @@
 
     if (!summaryArea) return;
 
-    const summary = escapeHTML(data.summary || '요약 내용이 없습니다.')
-      .replace(/\n/g, '<br>');
+    const summary = escapeHTML(
+      data.summary || '요약 내용이 없습니다.'
+    ).replace(/\n/g, '<br>');
 
     const terms = Array.isArray(data.keyTerms)
       ? data.keyTerms
@@ -478,13 +550,27 @@
     `;
   }
 
+  /* =========================================================
+     페이지 전환
+  ========================================================= */
+
   function showPage(pageName) {
     const aliases = {
       upload: ['upload', 'uploadPage', 'page-upload'],
       summary: ['summary', 'summaryPage', 'page-summary'],
       quiz: ['quiz', 'quizPage', 'page-quiz'],
-      quizResult: ['quizResult', 'result', 'resultPage', 'page-result'],
-      wrong: ['wrong', 'wrongPage', 'wrong-note', 'page-wrong']
+      quizResult: [
+        'quizResult',
+        'result',
+        'resultPage',
+        'page-result'
+      ],
+      wrong: [
+        'wrong',
+        'wrongPage',
+        'wrong-note',
+        'page-wrong'
+      ]
     };
 
     const allPages = document.querySelectorAll(
@@ -508,6 +594,7 @@
     if (target) {
       target.classList.add('active');
       target.style.display = '';
+
       target.scrollIntoView({
         behavior: 'smooth',
         block: 'start'
@@ -515,10 +602,17 @@
     }
   }
 
+  /* =========================================================
+     퀴즈 시작
+  ========================================================= */
+
   function startQuiz(count = null) {
     const requested = Math.max(
       1,
-      Math.min(100, Number(count) || getSelectedCount())
+      Math.min(
+        100,
+        Number(count) || getSelectedCount()
+      )
     );
 
     if (!state.questions.length) {
@@ -544,6 +638,10 @@
     renderCurrentQuestion();
   }
 
+  /* =========================================================
+     문제 화면
+  ========================================================= */
+
   function renderCurrentQuestion() {
     const question = state.quizQuestions[state.currentIndex];
 
@@ -555,7 +653,11 @@
     const number = state.currentIndex + 1;
     const total = state.quizQuestions.length;
 
-    const numberElement = $('questionNumber', 'currentQuestionNumber');
+    const numberElement = $(
+      'questionNumber',
+      'currentQuestionNumber'
+    );
+
     const progress = $('quizProgress', 'progressBar');
     const questionArea = $('quizQuestion', 'questionText');
     const optionsArea = $('quizOptions', 'optionsArea');
@@ -572,7 +674,10 @@
         progress.value = percent;
       } else {
         progress.style.width = `${percent}%`;
-        progress.setAttribute('aria-valuenow', String(percent));
+        progress.setAttribute(
+          'aria-valuenow',
+          String(percent)
+        );
       }
     }
 
@@ -581,16 +686,18 @@
     }
 
     if (optionsArea) {
-      optionsArea.innerHTML = question.options.map((option, index) => `
-        <button
-          type="button"
-          class="quiz-option"
-          data-option="${index}"
-        >
-          <span class="option-number">${index + 1}</span>
-          <span>${escapeHTML(option)}</span>
-        </button>
-      `).join('');
+      optionsArea.innerHTML = question.options.map(
+        (option, index) => `
+          <button
+            type="button"
+            class="quiz-option"
+            data-option="${index}"
+          >
+            <span class="option-number">${index + 1}</span>
+            <span>${escapeHTML(option)}</span>
+          </button>
+        `
+      ).join('');
 
       optionsArea.querySelectorAll('[data-option]').forEach(button => {
         button.addEventListener('click', () => {
@@ -605,15 +712,25 @@
       feedback.innerHTML = '';
     }
 
-    const nextButton = $('nextQuestion', 'next-question', 'nextButton');
+    const nextButton = $(
+      'nextQuestion',
+      'next-question',
+      'nextButton'
+    );
 
     if (nextButton) {
       nextButton.style.display = 'none';
     }
   }
 
+  /* =========================================================
+     답안 선택 및 채점
+  ========================================================= */
+
   function selectAnswer(selectedIndex) {
-    if (state.answers[state.currentIndex] !== undefined) return;
+    if (state.answers[state.currentIndex] !== undefined) {
+      return;
+    }
 
     const question = state.quizQuestions[state.currentIndex];
     const correct = selectedIndex === question.answer;
@@ -651,16 +768,24 @@
       feedback.innerHTML = `
         <div class="${correct ? 'correct-feedback' : 'wrong-feedback'}">
           <strong>${correct ? '정답입니다!' : '오답입니다.'}</strong>
-          <p>정답: ${escapeHTML(question.options[question.answer])}</p>
+          <p>
+            정답:
+            ${escapeHTML(question.options[question.answer])}
+          </p>
           <p>${escapeHTML(question.explanation)}</p>
         </div>
       `;
     }
 
-    const nextButton = $('nextQuestion', 'next-question', 'nextButton');
+    const nextButton = $(
+      'nextQuestion',
+      'next-question',
+      'nextButton'
+    );
 
     if (nextButton) {
       nextButton.style.display = 'block';
+
       nextButton.textContent =
         state.currentIndex + 1 === state.quizQuestions.length
           ? '결과 확인'
@@ -684,16 +809,24 @@
     renderCurrentQuestion();
   }
 
+  /* =========================================================
+     퀴즈 결과
+  ========================================================= */
+
   function finishQuiz() {
     const total = state.quizQuestions.length;
     const wrongCount = total - state.correctCount;
+
     const score = total
       ? Math.round((state.correctCount / total) * 100)
       : 0;
 
     saveStorage(STORAGE.wrong, state.wrongQuestions);
 
-    const resultArea = $('resultContent', 'result-content');
+    const resultArea = $(
+      'resultContent',
+      'result-content'
+    );
 
     if (resultArea) {
       resultArea.innerHTML = `
@@ -711,30 +844,51 @@
     showPage('quizResult');
   }
 
+  /* =========================================================
+     오답 노트
+  ========================================================= */
+
   function renderWrongList() {
-    const wrongArea = $('wrongList', 'wrong-list', 'wrongContent');
+    const wrongArea = $(
+      'wrongList',
+      'wrong-list',
+      'wrongContent'
+    );
 
     if (!wrongArea) return;
 
     if (!state.wrongQuestions.length) {
-      wrongArea.innerHTML = '<p>틀린 문제가 없습니다. 잘하셨습니다!</p>';
+      wrongArea.innerHTML =
+        '<p>틀린 문제가 없습니다. 잘하셨습니다!</p>';
       return;
     }
 
-    wrongArea.innerHTML = state.wrongQuestions.map((question, index) => `
-      <article class="wrong-question">
-        <h3>${index + 1}. ${escapeHTML(question.question)}</h3>
-        <p>
-          내가 선택한 답:
-          ${escapeHTML(question.options[question.userAnswer] || '미응답')}
-        </p>
-        <p>
-          정답:
-          ${escapeHTML(question.options[question.answer])}
-        </p>
-        <p>해설: ${escapeHTML(question.explanation)}</p>
-      </article>
-    `).join('');
+    wrongArea.innerHTML = state.wrongQuestions.map(
+      (question, index) => `
+        <article class="wrong-question">
+          <h3>
+            ${index + 1}. ${escapeHTML(question.question)}
+          </h3>
+
+          <p>
+            내가 선택한 답:
+            ${escapeHTML(
+              question.options[question.userAnswer] || '미응답'
+            )}
+          </p>
+
+          <p>
+            정답:
+            ${escapeHTML(question.options[question.answer])}
+          </p>
+
+          <p>
+            해설:
+            ${escapeHTML(question.explanation)}
+          </p>
+        </article>
+      `
+    ).join('');
   }
 
   function retryWrongAnswers() {
@@ -743,9 +897,9 @@
       return;
     }
 
-    state.quizQuestions = state.wrongQuestions.map(question => ({
-      ...question
-    }));
+    state.quizQuestions = state.wrongQuestions.map(
+      question => ({ ...question })
+    );
 
     state.currentIndex = 0;
     state.correctCount = 0;
@@ -756,15 +910,28 @@
     renderCurrentQuestion();
   }
 
+  /* =========================================================
+     AI 채팅
+     이전 대화는 새로고침할 때 삭제되며 저장하지 않음
+  ========================================================= */
+
   async function sendChatMessage() {
     if (state.busy) return;
 
-    const input = $('chatInput', 'chat-input', 'messageInput');
+    const input = $(
+      'chatInput',
+      'chat-input',
+      'messageInput'
+    );
+
     const message = input?.value.trim();
 
     if (!message) return;
 
-    const messagesArea = $('chatMessages', 'chat-messages');
+    const messagesArea = $(
+      'chatMessages',
+      'chat-messages'
+    );
 
     if (messagesArea) {
       messagesArea.insertAdjacentHTML(
@@ -801,7 +968,9 @@
       const data = await response.json().catch(() => ({}));
 
       if (!response.ok || !data.success) {
-        throw new Error(data.error || '채팅 응답을 받지 못했습니다.');
+        throw new Error(
+          data.error || '채팅 응답을 받지 못했습니다.'
+        );
       }
 
       const answer = data.answer || '답변이 비어 있습니다.';
@@ -811,12 +980,16 @@
         content: answer
       });
 
-      saveStorage(STORAGE.chat, state.chatHistory);
+      // 채팅 기록을 localStorage에 저장하지 않습니다.
 
       if (messagesArea) {
         const messageElement = document.createElement('div');
-        messageElement.className = 'chat-message assistant-message';
+
+        messageElement.className =
+          'chat-message assistant-message';
+
         messageElement.textContent = answer;
+
         messagesArea.appendChild(messageElement);
         messagesArea.scrollTop = messagesArea.scrollHeight;
       }
@@ -826,6 +999,10 @@
       showError(error.message);
     }
   }
+
+  /* =========================================================
+     이벤트 연결
+  ========================================================= */
 
   function bindEvents() {
     const fileInput = getFileInput();
@@ -878,16 +1055,30 @@
     );
 
     if (retryButton) {
-      retryButton.addEventListener('click', retryWrongAnswers);
+      retryButton.addEventListener(
+        'click',
+        retryWrongAnswers
+      );
     }
 
-    const chatButton = $('chatSend', 'chat-send', 'sendMessage');
+    const chatButton = $(
+      'chatSend',
+      'chat-send',
+      'sendMessage'
+    );
 
     if (chatButton) {
-      chatButton.addEventListener('click', sendChatMessage);
+      chatButton.addEventListener(
+        'click',
+        sendChatMessage
+      );
     }
 
-    const chatInput = $('chatInput', 'chat-input', 'messageInput');
+    const chatInput = $(
+      'chatInput',
+      'chat-input',
+      'messageInput'
+    );
 
     if (chatInput) {
       chatInput.addEventListener('keydown', event => {
@@ -909,7 +1100,9 @@
         }
       }
 
-      const pageButton = event.target.closest('[data-page-target]');
+      const pageButton = event.target.closest(
+        '[data-page-target]'
+      );
 
       if (pageButton) {
         showPage(pageButton.dataset.pageTarget);
@@ -931,11 +1124,26 @@
     }
   }
 
+  /* =========================================================
+     기존 학습 데이터 복원
+     채팅 기록은 복원하지 않음
+  ========================================================= */
+
   function restoreData() {
-    const savedQuestions = readStorage(STORAGE.questions, []);
-    const savedSummary = readStorage(STORAGE.summary, null);
-    const savedWrong = readStorage(STORAGE.wrong, []);
-    const savedChat = readStorage(STORAGE.chat, []);
+    const savedQuestions = readStorage(
+      STORAGE.questions,
+      []
+    );
+
+    const savedSummary = readStorage(
+      STORAGE.summary,
+      null
+    );
+
+    const savedWrong = readStorage(
+      STORAGE.wrong,
+      []
+    );
 
     if (Array.isArray(savedQuestions)) {
       state.questions = savedQuestions
@@ -952,14 +1160,18 @@
       state.wrongQuestions = savedWrong;
     }
 
-    if (Array.isArray(savedChat)) {
-      state.chatHistory = savedChat;
-    }
-
     renderQuestionCount(state.questions.length);
   }
 
+  /* =========================================================
+     초기화
+  ========================================================= */
+
   function initialize() {
+    // 가장 먼저 이전 AI 채팅 기록만 삭제
+    resetChatHistory();
+
+    // 나머지 학습 데이터는 유지
     bindEvents();
     restoreData();
     setSelectedCount(20);
@@ -971,12 +1183,18 @@
     window.retryWrongAnswers = retryWrongAnswers;
     window.sendChatMessage = sendChatMessage;
     window.showPage = showPage;
+    window.resetChatHistory = resetChatHistory;
 
-    console.log('공부킬러 app.js 초기화 완료');
+    console.log(
+      '공부킬러 초기화 완료: AI 채팅 기록 자동 초기화 활성화'
+    );
   }
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initialize);
+    document.addEventListener(
+      'DOMContentLoaded',
+      initialize
+    );
   } else {
     initialize();
   }
